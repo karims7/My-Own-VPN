@@ -54,3 +54,69 @@ vserver_socket.bind(server_address)
 print(f"VSwitch Started at {server_address[0]}:{server_address[1]}")
 
 
+
+"""
+.recvfrom() method waits for a UDP packet (Ethernet frame wrapped in UDP) to arrive. 
+input parameters: maximum size of Ethernet frame in bytes. In my case 1518 bytes. The largest chunk of data to expect. 
+
+output: 
+data: contains the actual bytes of the UDP packet that was received.
+vport or sender address: a tuple (IP, port) of the VPort (client) that sent it. example: ('192.168.1.5', 40000).
+
+UDP: method of sending data. 
+Ethernet frame is the actual data in bytes. For example b'\xff\xff\xff\xff\xff\xff\x11\x11\x11\x11\x11\x11\x08\x00HelloWorld...'
+
+ethernet headers are 14 bytes long. 
+so, we are grabbing those 14 and extracting the Destination MAC (Bytes 0-5), Source MAC (Bytes 6-11), and EtherType (Bytes 12-13).
+
+
+Example: ethernet_header[06:12] = b'\x11\x22\x33\x44\x55\x66'. each \x means a byte written in hexadecimal.
+So, a loop (x for x in eth_header[6:12]) would return x = 0x11, x = 0x22,x = 0x33, x = 0x44, x = 0x55, x = 0x66.
+"{:02x}".format(x)": This converts each byte (x) to a two-digit hexadecimal lowercase string. 
+Example: "{:02x}".format(255) = FF.
+join() takes this list of strings anf combines them using ":" as a separator.
+
+
+"""
+mac_table = {} # MAC addresses and their port numbers
+
+while True: # keep looping forever, listen for data all the time.
+    # 1. read ethernet from VPort
+    data, vport_sender_address = vserver_socket.recvfrom(1518)
+
+    # 2. parsing ethernet header
+    ethernet_header = data[:14] 
+    ethernet_destination = ":".join("{:02x}".format(x) for x in ethernet_header[0:6]) 
+    ethernet_source = ":".join("{:02x}".format(x) for x in ethernet_header[6:12])
+    print(f"[VSwitch] vport_sender_address<{vport_sender_address}>" f" src<{ethernet_source}> dst<{ethernet_destination}> datasz<{len(data)}>")
+
+
+    # 3. insert or update MAC table:
+    if ethernet_source not in mac_table or mac_table[ethernet_source] != vport_sender_address:
+        mac_table[ethernet_source] = vport_sender_address
+        print(f"[VSwitch] MAC Table Updated: {mac_table}")
+
+    """
+    Switch checks who the frame is for in the if statement.
+    If the destination MAC address is in the MAC table, it sends the frame to that address.
+
+    Else if the destination MAC address is the broadcast address (ff:ff:ff:ff:ff:ff), it sends the frame to all ports except the source port.
+    broadcast_destination_ports gets all the MAC addresses in the MAC table except the source MAC address
+    """
+    # 4. forward ethernet frame
+    # if destination is in mac table, forward ethernet frame to it
+    if ethernet_destination in mac_table:
+        vserver_socket.sendto(data, mac_table[ethernet_destination])
+    elif ethernet_destination == "ff:ff:ff:ff:ff:ff": # broadcast address
+        broadcast_destination_macs = list(mac_table.keys())
+        broadcast_destination_macs.remove(ethernet_source)
+        broadcast_destination_ports = {mac_table[mac] for mac in broadcast_destination_macs}
+        print(f"[VSwitch] Broadcasting {broadcast_destination_ports}")
+
+        for broadcast_destination in broadcast_destination_ports:
+            vserver_socket.sendto(data, broadcast_destination) # broadcasts data to each port in the broadcast list except the source port
+    else:
+        print(f"Ethernet Frame Discarded")
+
+
+    
