@@ -1,7 +1,0 @@
-{
-  "files.associations": {
-    "ethernet.h": "c",
-    "sys_utils.h": "c",
-    "kern_control.h": "c"
-  }
-}
