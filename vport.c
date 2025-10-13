@@ -60,3 +60,7 @@ void vport_init(struct vport_t *vport, const char *server_ip_string, int server_
     printf("[VPort] TAP device name: %s, VSwitch: %s:%d\n", tap_device, server_ip_string, server_port);
 
 }
+
+void *forward_ether_data_to_vswitch(void *raw_vport) {
+    
+}
